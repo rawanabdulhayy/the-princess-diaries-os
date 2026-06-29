@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Princess Diaries OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+(function() {
+  var primary = 'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js';
+  var fallback = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
+  var s = document.createElement('script');
+  s.src = primary;
+  s.onerror = function() {
+    var s2 = document.createElement('script');
+    s2.src = fallback;
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s);
+})();
+</script>
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   Same family as the work monitor (Fraunces / IBM Plex), warmed
+   and softened: a quiet blush instead of terracotta, a lower
+   contrast ink, gentler corners. This is a private, lived-in
+   notebook, not a status board.
+   ============================================================ */
+:root{
+  --bg:#FAF4F1; --paper:#FFFCFA; --ink:#2A2230; --ink-soft:#867C8A;
+  --accent:#B5708A; --accent-soft:#EFD9E0; --line:#EBDDE0;
+  --good:#5C7C5E; --good-bg:#E7EEE3; --good-line:#C7DAC2;
+  --watch:#B08A3E; --watch-bg:#F5EBD3; --watch-line:#E6D2A0;
+  --flare:#A8584F; --flare-bg:#F4E0DC; --flare-line:#E5BBB2;
+  --lav:#7C6FA6; --lav-bg:#E9E4F2; --lav-line:#D2C7E6;
+  --radius:10px;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;-webkit-font-smoothing:antialiased;}
+.sheet{max-width:840px;margin:0 auto;padding:30px 20px 70px;}
+
+/* MASTHEAD */
+.masthead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid var(--ink);padding-bottom:16px;margin-bottom:6px;gap:16px;}
+.masthead-left .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;}
+.masthead-left h1{font-family:'Fraunces',serif;font-weight:600;font-size:32px;margin:0;letter-spacing:-0.01em;}
+.masthead-right{text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);line-height:1.7;}
+
+/* TABS */
+.tab-bar{display:flex;gap:6px;margin:22px 0 26px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+.tab-btn{font-family:'Fraunces',serif;font-weight:500;font-size:15px;background:none;border:none;color:var(--ink-soft);padding:10px 4px;margin-right:18px;cursor:pointer;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;}
+.tab-btn:hover{color:var(--ink);}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* SECTION HEADER (shared) */
+.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;}
+.section-title{font-family:'Fraunces',serif;font-weight:600;font-size:20px;margin:0;}
+.section-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);margin-top:2px;}
+
+/* BUTTONS (shared) */
+.btn{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.04em;text-transform:uppercase;background:transparent;border:1px solid var(--ink);color:var(--ink);padding:8px 14px;cursor:pointer;border-radius:3px;transition:background .15s,color .15s;}
+.btn:hover{background:var(--ink);color:var(--paper);}
+.btn.accent{border-color:var(--accent);color:var(--accent);}
+.btn.accent:hover{background:var(--accent);color:#fff;}
+.btn.ghost{border-color:var(--line);color:var(--ink-soft);}
+.btn.ghost:hover{background:var(--line);color:var(--ink);}
+.btn.small{font-size:10px;padding:5px 10px;}
+.btn:disabled{opacity:.45;cursor:default;}
+.btn:disabled:hover{background:transparent;color:var(--ink);}
+.btn.accent:disabled:hover{background:transparent;color:var(--accent);}
+
+.text-btn{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;background:none;border:none;color:var(--ink-soft);cursor:pointer;padding:0;}
+.text-btn:hover{color:var(--flare);}
+
+/* CARD (shared) */
+.card{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);margin-bottom:16px;padding:18px 20px;overflow:hidden;}
+
+/* FORM CONTROLS (shared) */
+label.f-label{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:5px;}
+input.f-input,select.f-input,textarea.f-input{width:100%;font-family:'IBM Plex Sans',sans-serif;font-size:13.5px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px 10px;outline:none;transition:border-color .15s,box-shadow .15s;}
+input.f-input:focus,select.f-input:focus,textarea.f-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);}
+textarea.f-input{resize:vertical;min-height:64px;line-height:1.5;font-family:'IBM Plex Sans',sans-serif;}
+.f-row{margin-bottom:12px;}
+.f-grid{display:grid;gap:12px;}
+.f-grid.cols-2{grid-template-columns:1fr 1fr;}
+.f-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
+@media (max-width:600px){.f-grid.cols-2,.f-grid.cols-3{grid-template-columns:1fr;}}
+
+/* PILLS / TAGS */
+.pill{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:20px;border:1px solid transparent;white-space:nowrap;display:inline-block;}
+.pill.lav{color:var(--lav);background:var(--lav-bg);border-color:var(--lav-line);}
+.pill.flare{color:var(--flare);background:var(--flare-bg);border-color:var(--flare-line);}
+.pill.good{color:var(--good);background:var(--good-bg);border-color:var(--good-line);}
+.pill.watch{color:var(--watch);background:var(--watch-bg);border-color:var(--watch-line);}
+.pill.neutral{color:var(--ink-soft);background:var(--bg);border-color:var(--line);}
+
+/* EMPTY STATE */
+.empty-state{border:1px dashed var(--line);border-radius:var(--radius);padding:28px 20px;text-align:center;color:var(--ink-soft);font-size:13.5px;}
+.empty-state .empty-icon{font-size:22px;margin-bottom:8px;opacity:.6;}
+
+/* TOAST */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--ink);color:var(--paper);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:10px 18px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:999;box-shadow:0 6px 20px rgba(0,0,0,.18);}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast.error{background:var(--flare);}
+
+/* ===================== LOG TAB ===================== */
+.log-entry-card{border-left:4px solid var(--accent);}
+.log-entry-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+.log-date-block{font-family:'Fraunces',serif;}
+.log-date{font-size:18px;font-weight:600;}
+.log-daynum{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);margin-left:6px;}
+.log-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.log-headline{font-size:14.5px;font-style:italic;color:var(--ink);margin:8px 0 10px;padding-left:10px;border-left:2px solid var(--line);}
+.log-section-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin:12px 0 6px;}
+.body-update-row{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13.5px;}
+.body-update-row .area-tag{flex:0 0 130px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--accent);padding-top:1px;}
+.flare-row{background:var(--flare-bg);border-radius:6px;padding:8px 10px;margin-top:6px;font-size:13px;}
+.flare-row .flare-symptom{font-weight:600;color:var(--flare);}
+.flare-row .flare-cause{color:var(--ink-soft);margin-top:2px;}
+.intro-row{display:flex;gap:8px;align-items:baseline;padding:5px 0;font-size:13.5px;}
+.intro-row .intro-link{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--lav);white-space:nowrap;}
+.log-journal{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);font-size:13.5px;line-height:1.65;white-space:pre-wrap;color:var(--ink);}
+.log-attachments{margin-top:10px;font-size:12px;}
+.log-attachments a{color:var(--lav);text-decoration:none;border-bottom:1px dotted var(--lav-line);}
+.log-card-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px;}
+
+/* repeatable sub-form rows in the entry editor */
+.subform-list{margin-bottom:10px;}
+.subform-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;margin-bottom:8px;padding:10px;background:var(--bg);border-radius:6px;}
+.subform-row.intro-form-row{grid-template-columns:1fr 1.4fr auto;}
+.subform-row .row-del{align-self:center;background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:15px;padding:4px;}
+.subform-row .row-del:hover{color:var(--flare);}
+@media (max-width:600px){.subform-row,.subform-row.intro-form-row{grid-template-columns:1fr;}}
+.subform-add{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);background:none;border:1px dashed var(--accent-soft);border-radius:6px;padding:7px 12px;cursor:pointer;width:100%;text-align:left;}
+.subform-add:hover{background:var(--accent-soft);}
+
+.filter-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center;}
+.filter-bar select.f-input{width:auto;min-width:150px;}
+
+/* ===================== INVENTORY TAB ===================== */
+.inv-category-block{margin-bottom:24px;}
+.inv-category-title{font-family:'Fraunces',serif;font-weight:600;font-size:17px;margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line);}
+.inv-item-row{display:grid;grid-template-columns:70px 1fr 100px auto;gap:10px;align-items:start;padding:9px 0;border-top:1px solid var(--line);font-size:13.5px;}
+.inv-item-row:first-of-type{border-top:none;}
+.inv-item-row .inv-tag{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--accent);padding-top:2px;}
+.inv-item-row .inv-name{font-weight:500;}
+.inv-item-row .inv-cues{color:var(--ink-soft);font-size:12.5px;margin-top:2px;}
+.inv-item-row .inv-setsreps{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink-soft);}
+.inv-item-row.inactive{opacity:.45;}
+.inv-item-row.inactive .inv-name::after{content:" (retired)";font-size:11px;font-style:italic;}
+.inv-row-actions{display:flex;gap:8px;}
+@media (max-width:600px){.inv-item-row{grid-template-columns:1fr;}}
+
+/* ===================== PLANNER TAB ===================== */
+.planner-template-picker{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+.template-chip{font-family:'IBM Plex Mono',monospace;font-size:11.5px;border:1px solid var(--line);border-radius:20px;padding:7px 14px;cursor:pointer;background:var(--paper);color:var(--ink);transition:all .15s;}
+.template-chip:hover{border-color:var(--accent);}
+.template-chip.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.block-row{display:flex;gap:12px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:13.5px;}
+.block-row:first-of-type{border-top:none;}
+.block-time{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--accent);flex:0 0 140px;}
+.block-label{flex:1;}
+.block-del{background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:14px;}
+.block-del:hover{color:var(--flare);}
+.day-plan-date-row{display:flex;gap:12px;align-items:center;margin-bottom:18px;flex-wrap:wrap;}
+
+/* RESPONSIVE */
+@media (max-width:600px){
+  .sheet{padding:20px 14px 60px;}
+  .masthead{flex-direction:column;align-items:flex-start;gap:8px;}
+  .masthead-right{text-align:left;}
+  .log-entry-top{flex-direction:column;}
+}
+
+/* ACCESSIBILITY */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+@media (prefers-reduced-motion:reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="masthead">
+    <div class="masthead-left">
+      <div class="eyebrow">Princess Diaries OS</div>
+      <h1>The Day Book</h1>
+    </div>
+    <div class="masthead-right" id="masthead-right">
+      <div id="rowCountLine">— rows —</div>
+      <div id="lastSyncLine">—</div>
+    </div>
+  </div>
+
+  <div class="tab-bar" role="tablist">
+    <button class="tab-btn active" data-tab="log" role="tab">Log</button>
+    <button class="tab-btn" data-tab="inventory" role="tab">Inventory</button>
+    <button class="tab-btn" data-tab="planner" role="tab">Day Plan</button>
+    <button class="tab-btn" data-tab="archive" role="tab">Archive</button>
+  </div>
+
+  <!-- ============ LOG TAB ============ -->
+  <div class="tab-panel active" id="panel-log">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Entries</h2>
+        <div class="section-sub" id="logCountSub">loading…</div>
+      </div>
+      <button class="btn accent" id="newEntryBtn">+ New Entry</button>
+    </div>
+
+    <div class="filter-bar">
+      <select class="f-input" id="filterDayType">
+        <option value="">All day types</option>
+        <option>Home Workout</option>
+        <option>Stretching</option>
+        <option>Physical Therapy</option>
+        <option>Hair Wash</option>
+        <option>Off</option>
+        <option>Other</option>
+      </select>
+      <select class="f-input" id="filterCyclePhase">
+        <option value="">All cycle phases</option>
+        <option>Follicular</option>
+        <option>Ovulation</option>
+        <option>Luteal</option>
+        <option>Late Luteal/Menstrual</option>
+        <option>Irregular</option>
+      </select>
+      <select class="f-input" id="filterFlareOnly">
+        <option value="">All entries</option>
+        <option value="flare">Flare days only</option>
+      </select>
+    </div>
+
+    <div id="newEntryFormSlot"></div>
+    <div id="logList"><div class="empty-state">Loading entries…</div></div>
+    <button class="btn ghost small" id="loadMoreBtn" style="display:none;margin-top:6px;">Load more</button>
+  </div>
+
+  <!-- ============ INVENTORY TAB ============ -->
+  <div class="tab-panel" id="panel-inventory">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Exercise Inventory</h2>
+        <div class="section-sub">Your living V1→V10+ library — link entries to these, or add new variations as they come up.</div>
+      </div>
+      <button class="btn accent" id="newInvItemBtn">+ Add Item</button>
+    </div>
+    <div id="newInvFormSlot"></div>
+    <div class="filter-bar">
+      <select class="f-input" id="filterInvCategory"><option value="">All categories</option></select>
+      <select class="f-input" id="filterInvActive">
+        <option value="active">Active only</option>
+        <option value="all">Include retired</option>
+      </select>
+    </div>
+    <div id="inventoryList"><div class="empty-state">Loading inventory…</div></div>
+  </div>
+
+  <!-- ============ PLANNER TAB ============ -->
+  <div class="tab-panel" id="panel-planner">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Day Plan</h2>
+        <div class="section-sub">Pick a saved template for today, tweak it freely, or start from a blank slate.</div>
+      </div>
+      <button class="btn accent" id="newTemplateBtn">+ New Template</button>
+    </div>
+
+    <div class="day-plan-date-row">
+      <input type="date" class="f-input" id="plannerDate" style="width:auto;">
+      <span id="plannerDayLabel" class="section-sub"></span>
+    </div>
+
+    <div class="planner-template-picker" id="templatePicker"></div>
+    <div id="newTemplateFormSlot"></div>
+    <div id="plannerDayEditor"><div class="empty-state">Pick a date to view or build a day plan.</div></div>
+  </div>
+
+  <!-- ============ ARCHIVE TAB ============ -->
+  <div class="tab-panel" id="panel-archive">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Export &amp; Archive</h2>
+        <div class="section-sub">Free-tier mitigation: export everything to a JSON file you keep yourself, then optionally clear old rows from the live database.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="font-size:15px;margin-bottom:6px;">Export</div>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px;">Downloads a single JSON file with everything — log entries, inventory, planner templates and days. Keep these files somewhere safe; you can re-import any of them later to browse offline or restore into a fresh project.</p>
+      <button class="btn accent" id="exportAllBtn">Export Everything</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="font-size:15px;margin-bottom:6px;">Export &amp; Clear a Date Range</div>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px;">Exports log entries in a date range, then — only after you confirm the download succeeded — deletes those rows from the live database to keep it small. Inventory and planner templates are never touched by this.</p>
+      <div class="f-grid cols-2" style="margin-bottom:12px;">
+        <div><label class="f-label">From</label><input type="date" class="f-input" id="archiveFrom"></div>
+        <div><label class="f-label">To</label><input type="date" class="f-input" id="archiveTo"></div>
+      </div>
+      <button class="btn" id="archiveRangeBtn">Export Range</button>
+      <button class="btn ghost" id="clearRangeBtn" disabled>Clear Exported Range From Database</button>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="font-size:15px;margin-bottom:6px;">Import</div>
+      <p style="font-size:13px;color:var(--ink-soft);margin:0 0 12px;">Load a previously exported JSON file back in — either to browse it read-only in this tab, or to restore it into the database (only do this on a fresh/empty project to avoid duplicates).</p>
+      <input type="file" id="importFile" accept=".json" style="margin-bottom:10px;display:block;">
+      <button class="btn" id="importViewBtn" disabled>View Offline</button>
+      <button class="btn ghost" id="importRestoreBtn" disabled>Restore Into Database</button>
+    </div>
+
+    <div id="archiveLogList"></div>
+    <div id="offlineViewer"></div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   SUPABASE CONFIG
+   This is a BRAND NEW, SEPARATE project from the work monitor.
+   Replace these two values with your new project's credentials
+   (Project Settings → API in the Supabase dashboard).
+   ============================================================ */
+const SUPABASE_URL = 'YOUR_NEW_SUPABASE_PROJECT_URL';
+const SUPABASE_ANON_KEY = 'YOUR_NEW_SUPABASE_ANON_KEY';
+
+let supabase = null;
+let supabaseReady = false;
+
+function initSupabase(){
+  if(window.supabase && SUPABASE_URL.startsWith('http')){
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabaseReady = true;
+  } else {
+    setTimeout(initSupabase, 150);
+  }
+}
+</script>
+<script src="app.js"></script>
+</body>
+</html>

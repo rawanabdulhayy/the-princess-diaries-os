@@ -128,7 +128,7 @@ async function loadLogEntries(reset=true){
   if(reset) listEl.innerHTML = '<div class="empty-state">Loading entries…</div>';
 
   let query = supabase.from('log_entries')
-    .select(`id,entry_date,day_number,day_type,day_type_custom,cycle_phase,headline,journal,
+    .select(`id,entry_date,day_number,day_type,day_type_custom,cycle_phase,headline,journal,entry_date_uncertain,
       log_body_updates(id,area,note,display_order),
       log_flare_notes(id,symptom,suspected_causes,area_link,display_order),
       log_newly_introduced(id,inventory_id,inventory_label_snapshot,description,display_order),
@@ -167,12 +167,13 @@ function renderLogList(){
 
 function renderLogCard(row){
   const card = document.createElement('div');
-  card.className = 'card log-entry-card';
+  card.className = 'card log-entry-card' + (row.entry_date_uncertain ? ' date-uncertain' : '');
 
   const top = document.createElement('div'); top.className='log-entry-top';
   const dateBlock = document.createElement('div'); dateBlock.className='log-date-block';
   dateBlock.innerHTML = `<span class="log-date">${escHtml(fmtDateLong(row.entry_date))}</span>` + (row.day_number!=null ? `<span class="log-daynum">Day ${escHtml(row.day_number)}</span>` : '');
   const tags = document.createElement('div'); tags.className='log-tags';
+  if(row.entry_date_uncertain) tags.innerHTML += `<span class="uncertain-badge" title="Date recorded ambiguously in original notes — shifted to next day to resolve conflict">date uncertain</span>`;
   if(dayTypeLabel(row)) tags.innerHTML += `<span class="pill lav">${escHtml(dayTypeLabel(row))}</span>`;
   if(row.cycle_phase) tags.innerHTML += `<span class="pill watch">${escHtml(row.cycle_phase)}</span>`;
   if((row.log_flare_notes||[]).length) tags.innerHTML += `<span class="pill flare">${row.log_flare_notes.length} flare note${row.log_flare_notes.length>1?'s':''}</span>`;
@@ -261,7 +262,7 @@ async function openEntryEditor(existing){
   const isNew = !existing;
   const data = existing ? JSON.parse(JSON.stringify(existing)) : {
     id:null, entry_date: todayISO(), day_number:null, day_type:'', day_type_custom:'',
-    cycle_phase:'', headline:'', journal:'',
+    cycle_phase:'', headline:'', journal:'', entry_date_uncertain: false,
     log_body_updates:[], log_flare_notes:[], log_newly_introduced:[], log_attachments:[]
   };
   // working copies for sub-lists (each item gets a temp client id if new)
@@ -296,6 +297,10 @@ async function openEntryEditor(existing){
         <option value="">—</option>
         ${CYCLE_PHASES.map(p=>`<option value="${p}" ${data.cycle_phase===p?'selected':''}>${p}</option>`).join('')}
       </select>
+    </div>
+    <div class="f-row" style="display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" id="ef-uncertain" ${data.entry_date_uncertain?'checked':''} style="accent-color:var(--watch);width:15px;height:15px;cursor:pointer;">
+      <label for="ef-uncertain" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--watch);cursor:pointer;text-transform:uppercase;letter-spacing:.05em;">Date uncertain (originally logged ambiguously)</label>
     </div>
     <div class="f-row">
       <label class="f-label">Headline (the short "→" summary line)</label>
@@ -483,6 +488,7 @@ async function saveEntry(existing, data, wrap, slot){
     day_type: wrap.querySelector('#ef-daytype').value,
     day_type_custom: wrap.querySelector('#ef-daytype-custom').value.trim() || null,
     cycle_phase: wrap.querySelector('#ef-cycle').value || null,
+    entry_date_uncertain: wrap.querySelector('#ef-uncertain').checked,
     headline: wrap.querySelector('#ef-headline').value.trim(),
     journal: wrap.querySelector('#ef-journal').value,
     updated_at: new Date().toISOString()

@@ -336,12 +336,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 const SUPABASE_URL = 'https://vlhnfhzpagqngoejjtvi.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_yl5WgIiJDIkFhXy7jSYc5g_c5kKuevj';
 
-let supabase = null;
+let sb = null;
 let supabaseReady = false;
 
 function initSupabase(){
   if(window.supabase && SUPABASE_URL.startsWith('http')){
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     supabaseReady = true;
   } else {
     setTimeout(initSupabase, 150);

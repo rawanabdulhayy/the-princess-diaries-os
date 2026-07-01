@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', init);
 
 async function refreshRowCount(){
   try{
-    const { count } = await supabase.from('log_entries').select('id', {count:'exact', head:true});
+    const { count } = await sb.from('log_entries').select('id', {count:'exact', head:true});
     document.getElementById('rowCountLine').textContent = (count==null?'—':count) + ' log entries';
     document.getElementById('lastSyncLine').textContent = 'Synced ' + new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
   }catch(e){
@@ -116,7 +116,7 @@ let logState = { rows: [], page: 0, pageSize: 20, filters:{dayType:'',cyclePhase
 
 async function fetchInventoryForLinking(){
   if(logState.inventoryCache) return logState.inventoryCache;
-  const { data, error } = await supabase.from('inventory_items').select('id,category,version_tag,name,active').order('category').order('display_order');
+  const { data, error } = await sb.from('inventory_items').select('id,category,version_tag,name,active').order('category').order('display_order');
   if(error){ toast('Could not load inventory for linking', true); return []; }
   logState.inventoryCache = data || [];
   return logState.inventoryCache;
@@ -127,7 +127,7 @@ async function loadLogEntries(reset=true){
   if(reset){ logState.page = 0; }
   if(reset) listEl.innerHTML = '<div class="empty-state">Loading entries…</div>';
 
-  let query = supabase.from('log_entries')
+  let query = sb.from('log_entries')
     .select(`id,entry_date,day_number,day_type,day_type_custom,cycle_phase,headline,journal,entry_date_uncertain,
       log_body_updates(id,area,note,display_order),
       log_flare_notes(id,symptom,suspected_causes,area_link,display_order),
@@ -245,7 +245,7 @@ function renderLogCard(row){
 
 async function deleteLogEntry(id){
   if(!confirm('Delete this entry? This cannot be undone.')) return;
-  const { error } = await supabase.from('log_entries').delete().eq('id', id);
+  const { error } = await sb.from('log_entries').delete().eq('id', id);
   if(error){ toast('Delete failed: '+error.message, true); return; }
   logState.rows = logState.rows.filter(r=>r.id!==id);
   renderLogList();
@@ -466,7 +466,7 @@ function renderAttachmentRows(wrap, data){
 }
 
 async function suggestNextDayNumber(){
-  const { data } = await supabase.from('log_entries').select('day_number').order('day_number',{ascending:false}).limit(1);
+  const { data } = await sb.from('log_entries').select('day_number').order('day_number',{ascending:false}).limit(1);
   if(data && data.length && data[0].day_number!=null) return data[0].day_number+1;
   return null;
 }
@@ -498,30 +498,30 @@ async function saveEntry(existing, data, wrap, slot){
     let logId;
     if(existing){
       logId = existing.id;
-      const { error } = await supabase.from('log_entries').update(payload).eq('id', logId);
+      const { error } = await sb.from('log_entries').update(payload).eq('id', logId);
       if(error) throw error;
       // wipe and re-insert child rows — simplest consistent approach for a personal-scale app
-      await supabase.from('log_body_updates').delete().eq('log_id', logId);
-      await supabase.from('log_flare_notes').delete().eq('log_id', logId);
-      await supabase.from('log_newly_introduced').delete().eq('log_id', logId);
-      await supabase.from('log_attachments').delete().eq('log_id', logId);
+      await sb.from('log_body_updates').delete().eq('log_id', logId);
+      await sb.from('log_flare_notes').delete().eq('log_id', logId);
+      await sb.from('log_newly_introduced').delete().eq('log_id', logId);
+      await sb.from('log_attachments').delete().eq('log_id', logId);
     } else {
-      const { data: inserted, error } = await supabase.from('log_entries').insert(payload).select().single();
+      const { data: inserted, error } = await sb.from('log_entries').insert(payload).select().single();
       if(error) throw error;
       logId = inserted.id;
     }
 
     const bodyRows = data.log_body_updates.filter(x=>x.area && x.area.trim()).map((x,i)=>({log_id:logId, area:x.area, note:x.note||'', display_order:i}));
-    if(bodyRows.length){ const {error} = await supabase.from('log_body_updates').insert(bodyRows); if(error) throw error; }
+    if(bodyRows.length){ const {error} = await sb.from('log_body_updates').insert(bodyRows); if(error) throw error; }
 
     const flareRows = data.log_flare_notes.filter(x=>x.symptom && x.symptom.trim()).map((x,i)=>({log_id:logId, symptom:x.symptom, suspected_causes:x.suspected_causes||'', display_order:i}));
-    if(flareRows.length){ const {error} = await supabase.from('log_flare_notes').insert(flareRows); if(error) throw error; }
+    if(flareRows.length){ const {error} = await sb.from('log_flare_notes').insert(flareRows); if(error) throw error; }
 
     const introRows = data.log_newly_introduced.filter(x=>x.description && x.description.trim()).map((x,i)=>({log_id:logId, inventory_id:x.inventory_id||null, inventory_label_snapshot:x.inventory_label_snapshot||null, description:x.description, display_order:i}));
-    if(introRows.length){ const {error} = await supabase.from('log_newly_introduced').insert(introRows); if(error) throw error; }
+    if(introRows.length){ const {error} = await sb.from('log_newly_introduced').insert(introRows); if(error) throw error; }
 
     const attRows = data.log_attachments.filter(x=>x.url && x.url.trim()).map((x,i)=>({log_id:logId, url:x.url, label:x.label||null, display_order:i}));
-    if(attRows.length){ const {error} = await supabase.from('log_attachments').insert(attRows); if(error) throw error; }
+    if(attRows.length){ const {error} = await sb.from('log_attachments').insert(attRows); if(error) throw error; }
 
     slot.innerHTML = '';
     toast(existing ? 'Entry updated' : 'Entry saved');
@@ -548,7 +548,7 @@ let invState = { items: [], categories: [], filterCategory:'', filterActive:'act
 async function loadInventory(){
   const listEl = document.getElementById('inventoryList');
   listEl.innerHTML = '<div class="empty-state">Loading inventory…</div>';
-  const { data, error } = await supabase.from('inventory_items').select('*').order('category').order('display_order');
+  const { data, error } = await sb.from('inventory_items').select('*').order('category').order('display_order');
   if(error){ listEl.innerHTML = '<div class="empty-state">Could not load inventory.</div>'; toast('Load failed: '+error.message, true); return; }
   invState.items = data || [];
   invState.categories = [...new Set(invState.items.map(i=>i.category))];
@@ -607,7 +607,7 @@ function renderInvRow(item){
 }
 
 async function toggleInvActive(item){
-  const { error } = await supabase.from('inventory_items').update({active: !item.active, updated_at:new Date().toISOString()}).eq('id', item.id);
+  const { error } = await sb.from('inventory_items').update({active: !item.active, updated_at:new Date().toISOString()}).eq('id', item.id);
   if(error){ toast('Update failed: '+error.message, true); return; }
   item.active = !item.active;
   renderInventoryList();
@@ -662,11 +662,11 @@ function openInvEditor(existing){
     };
     try{
       if(existing){
-        const { error } = await supabase.from('inventory_items').update(payload).eq('id', existing.id);
+        const { error } = await sb.from('inventory_items').update(payload).eq('id', existing.id);
         if(error) throw error;
       } else {
         payload.active = true; payload.display_order = invState.items.length;
-        const { error } = await supabase.from('inventory_items').insert(payload);
+        const { error } = await sb.from('inventory_items').insert(payload);
         if(error) throw error;
       }
       slot.innerHTML = '';
@@ -699,7 +699,7 @@ async function initPlanner(){
 }
 
 async function loadPlannerTemplates(){
-  const { data, error } = await supabase.from('planner_templates').select('*, planner_blocks(*)').order('display_order');
+  const { data, error } = await sb.from('planner_templates').select('*, planner_blocks(*)').order('display_order');
   if(error){ toast('Could not load templates: '+error.message, true); return; }
   plannerState.templates = data || [];
   renderTemplatePicker();
@@ -724,7 +724,7 @@ function renderTemplatePicker(){
 
 async function loadPlannerDay(dateStr){
   document.getElementById('plannerDayLabel').textContent = fmtDateLong(dateStr);
-  const { data, error } = await supabase.from('planner_days').select('*').eq('plan_date', dateStr).maybeSingle();
+  const { data, error } = await sb.from('planner_days').select('*').eq('plan_date', dateStr).maybeSingle();
   if(error){ toast('Could not load day plan: '+error.message, true); return; }
   plannerState.dayRow = data || null;
   plannerState.selectedTemplateId = data ? data.template_id : null;
@@ -798,7 +798,7 @@ async function savePlannerDay(){
     updated_at: new Date().toISOString()
   };
   try{
-    const { error } = await supabase.from('planner_days').upsert(payload, { onConflict: 'plan_date' });
+    const { error } = await sb.from('planner_days').upsert(payload, { onConflict: 'plan_date' });
     if(error) throw error;
     toast('Day plan saved');
   }catch(e){ toast('Save failed: '+e.message, true); }
@@ -852,12 +852,12 @@ document.getElementById('newTemplateBtn').addEventListener('click', ()=>{
     if(!name){ toast('Template name is required', true); return; }
     const saveBtn = wrap.querySelector('#tf-save'); saveBtn.disabled=true; saveBtn.textContent='Saving…';
     try{
-      const { data: tpl, error } = await supabase.from('planner_templates').insert({
+      const { data: tpl, error } = await sb.from('planner_templates').insert({
         name, description: wrap.querySelector('#tf-desc').value.trim()||null, display_order: plannerState.templates.length
       }).select().single();
       if(error) throw error;
       const blockRows = workingBlocks.filter(b=>b.label.trim()).map((b,i)=>({template_id:tpl.id, start_time:b.start_time, end_time:b.end_time, label:b.label, display_order:i}));
-      if(blockRows.length){ const {error:e2} = await supabase.from('planner_blocks').insert(blockRows); if(e2) throw e2; }
+      if(blockRows.length){ const {error:e2} = await sb.from('planner_blocks').insert(blockRows); if(e2) throw e2; }
       slot.innerHTML = '';
       toast('Template saved');
       await loadPlannerTemplates();
@@ -872,7 +872,7 @@ document.getElementById('newTemplateBtn').addEventListener('click', ()=>{
 let archiveState = { lastExportedRange: null, importedData: null };
 
 async function fetchAllLogEntriesFull(fromDate, toDate){
-  let query = supabase.from('log_entries').select(`*,
+  let query = sb.from('log_entries').select(`*,
     log_body_updates(*), log_flare_notes(*), log_newly_introduced(*), log_attachments(*)`);
   if(fromDate) query = query.gte('entry_date', fromDate);
   if(toDate) query = query.lte('entry_date', toDate);
@@ -882,7 +882,7 @@ async function fetchAllLogEntriesFull(fromDate, toDate){
 }
 
 async function loadArchiveLog(){
-  const { data, error } = await supabase.from('archive_log').select('*').order('created_at',{ascending:false});
+  const { data, error } = await sb.from('archive_log').select('*').order('created_at',{ascending:false});
   const wrap = document.getElementById('archiveLogList');
   if(error){ wrap.innerHTML=''; return; }
   if(!data || !data.length){ wrap.innerHTML=''; return; }
@@ -899,9 +899,9 @@ document.getElementById('exportAllBtn').addEventListener('click', async ()=>{
   try{
     const [logEntries, inventory, templates, plannerDays] = await Promise.all([
       fetchAllLogEntriesFull(null,null),
-      supabase.from('inventory_items').select('*').order('category').order('display_order').then(r=>r.data||[]),
-      supabase.from('planner_templates').select('*, planner_blocks(*)').order('display_order').then(r=>r.data||[]),
-      supabase.from('planner_days').select('*').order('plan_date').then(r=>r.data||[])
+      sb.from('inventory_items').select('*').order('category').order('display_order').then(r=>r.data||[]),
+      sb.from('planner_templates').select('*, planner_blocks(*)').order('display_order').then(r=>r.data||[]),
+      sb.from('planner_days').select('*').order('plan_date').then(r=>r.data||[])
     ]);
     const exportObj = { exported_at: new Date().toISOString(), type:'full_export', log_entries: logEntries, inventory_items: inventory, planner_templates: templates, planner_days: plannerDays };
     downloadJSON(exportObj, `princess-os-full-export-${todayISO()}.json`);
@@ -932,9 +932,9 @@ document.getElementById('clearRangeBtn').addEventListener('click', async ()=>{
   if(!confirm(`Delete ${r.count} log entries from ${r.from} to ${r.to} from the LIVE database? Make sure the exported JSON file downloaded successfully first. This cannot be undone.`)) return;
   const btn = document.getElementById('clearRangeBtn'); btn.disabled=true; btn.textContent='Clearing…';
   try{
-    const { error } = await supabase.from('log_entries').delete().gte('entry_date', r.from).lte('entry_date', r.to);
+    const { error } = await sb.from('log_entries').delete().gte('entry_date', r.from).lte('entry_date', r.to);
     if(error) throw error;
-    await supabase.from('archive_log').insert({ archived_from: r.from, archived_to: r.to, row_count: r.count, note: 'Exported then cleared from live DB' });
+    await sb.from('archive_log').insert({ archived_from: r.from, archived_to: r.to, row_count: r.count, note: 'Exported then cleared from live DB' });
     toast(`Cleared ${r.count} entries from the database`);
     archiveState.lastExportedRange = null;
     btn.textContent = 'Clear Exported Range From Database';
@@ -987,26 +987,26 @@ document.getElementById('importRestoreBtn').addEventListener('click', async ()=>
     let restoredCount = 0;
     if(d.inventory_items && d.inventory_items.length){
       const rows = d.inventory_items.map(({id, created_at, updated_at, ...rest})=>rest);
-      const { error } = await supabase.from('inventory_items').insert(rows);
+      const { error } = await sb.from('inventory_items').insert(rows);
       if(error) throw error;
     }
     if(d.log_entries && d.log_entries.length){
       for(const entry of d.log_entries){
         const { log_body_updates, log_flare_notes, log_newly_introduced, log_attachments, id, created_at, updated_at, ...entryRest } = entry;
-        const { data: inserted, error } = await supabase.from('log_entries').insert(entryRest).select().single();
+        const { data: inserted, error } = await sb.from('log_entries').insert(entryRest).select().single();
         if(error) throw error;
         const logId = inserted.id;
         if(log_body_updates && log_body_updates.length){
-          await supabase.from('log_body_updates').insert(log_body_updates.map(({id,...r})=>({...r, log_id:logId})));
+          await sb.from('log_body_updates').insert(log_body_updates.map(({id,...r})=>({...r, log_id:logId})));
         }
         if(log_flare_notes && log_flare_notes.length){
-          await supabase.from('log_flare_notes').insert(log_flare_notes.map(({id,...r})=>({...r, log_id:logId})));
+          await sb.from('log_flare_notes').insert(log_flare_notes.map(({id,...r})=>({...r, log_id:logId})));
         }
         if(log_newly_introduced && log_newly_introduced.length){
-          await supabase.from('log_newly_introduced').insert(log_newly_introduced.map(({id,...r})=>({...r, log_id:logId})));
+          await sb.from('log_newly_introduced').insert(log_newly_introduced.map(({id,...r})=>({...r, log_id:logId})));
         }
         if(log_attachments && log_attachments.length){
-          await supabase.from('log_attachments').insert(log_attachments.map(({id,...r})=>({...r, log_id:logId})));
+          await sb.from('log_attachments').insert(log_attachments.map(({id,...r})=>({...r, log_id:logId})));
         }
         restoredCount++;
       }
@@ -1014,16 +1014,16 @@ document.getElementById('importRestoreBtn').addEventListener('click', async ()=>
     if(d.planner_templates && d.planner_templates.length){
       for(const tpl of d.planner_templates){
         const { planner_blocks, id, created_at, updated_at, ...tplRest } = tpl;
-        const { data: inserted, error } = await supabase.from('planner_templates').insert(tplRest).select().single();
+        const { data: inserted, error } = await sb.from('planner_templates').insert(tplRest).select().single();
         if(error) throw error;
         if(planner_blocks && planner_blocks.length){
-          await supabase.from('planner_blocks').insert(planner_blocks.map(({id,...r})=>({...r, template_id:inserted.id})));
+          await sb.from('planner_blocks').insert(planner_blocks.map(({id,...r})=>({...r, template_id:inserted.id})));
         }
       }
     }
     if(d.planner_days && d.planner_days.length){
       const rows = d.planner_days.map(({id, created_at, updated_at, ...rest})=>rest);
-      await supabase.from('planner_days').upsert(rows, {onConflict:'plan_date'});
+      await sb.from('planner_days').upsert(rows, {onConflict:'plan_date'});
     }
     toast(`Restored ${restoredCount} log entries and related data`);
     await refreshRowCount();

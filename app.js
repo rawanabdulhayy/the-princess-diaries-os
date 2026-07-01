@@ -27,6 +27,11 @@ function fmtDateShort(dateStr){
   return d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
 }
 
+function fmtNum(n){
+  if(n==null || n==='' || isNaN(n)) return '—';
+  return Number(n).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:2});
+}
+
 function todayISO(){
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -65,12 +70,13 @@ function initTabs(){
   });
 }
 
-let tabsLoaded = { log:false, inventory:false, planner:false, archive:false };
+let tabsLoaded = { log:false, inventory:false, planner:false, archive:false, budget:false };
 function onTabShown(tab){
   if(tab==='log' && !tabsLoaded.log){ tabsLoaded.log=true; loadLogEntries(); }
   if(tab==='inventory' && !tabsLoaded.inventory){ tabsLoaded.inventory=true; loadInventory(); }
   if(tab==='planner' && !tabsLoaded.planner){ tabsLoaded.planner=true; initPlanner(); }
   if(tab==='archive' && !tabsLoaded.archive){ tabsLoaded.archive=true; loadArchiveLog(); }
+  if(tab==='budget' && !tabsLoaded.budget){ tabsLoaded.budget=true; loadBudget(); }
 }
 
 /* ============================================================
@@ -86,6 +92,7 @@ async function waitForSupabase(){
 async function init(){
   initSupabase();
   initTabs();
+  wireBudgetEvents();
   await waitForSupabase();
   await refreshRowCount();
   await loadLogEntries();
@@ -1031,3 +1038,409 @@ document.getElementById('importRestoreBtn').addEventListener('click', async ()=>
   }catch(e){ toast('Restore failed: '+e.message, true); }
   btn.disabled=false; btn.textContent='Restore Into Database';
 });
+
+/* ============================================================
+   BUDGET TAB
+   Three category shapes:
+   - itemized  (A: Teeth, G: Self-Care) — items + a payment log per item
+   - pool      (F: Savings)             — goal + running balance from contributions
+   - reference (B/C/D/E)                — manual placeholder until each gets its own page
+   ============================================================ */
+let budgetState = { categories:[], items:[], payments:[], savings:{goal_amount:null}, contributions:[], references:[] };
+
+async function loadBudget(){
+  const wrap = document.getElementById('budgetCategories');
+  wrap.innerHTML = '<div class="empty-state">Loading budget…</div>';
+  try{
+    const [catRes, itemRes, payRes, savRes, contRes, refRes] = await Promise.all([
+      sb.from('budget_categories').select('*').order('display_order'),
+      sb.from('budget_items').select('*').order('display_order').order('item_date'),
+      sb.from('budget_payments').select('*').order('payment_date'),
+      sb.from('budget_savings').select('*').eq('id',1).maybeSingle(),
+      sb.from('budget_savings_contributions').select('*').order('contribution_date',{ascending:false}),
+      sb.from('budget_references').select('*')
+    ]);
+    const firstError = [catRes,itemRes,payRes,savRes,contRes,refRes].map(r=>r.error).find(Boolean);
+    if(firstError) throw firstError;
+
+    budgetState.categories = catRes.data || [];
+    budgetState.items = itemRes.data || [];
+    budgetState.payments = payRes.data || [];
+    budgetState.savings = savRes.data || {goal_amount:null};
+    budgetState.contributions = contRes.data || [];
+    budgetState.references = refRes.data || [];
+    renderBudget();
+  }catch(e){
+    wrap.innerHTML = '<div class="empty-state">Could not load budget. Have you run budget-schema.sql yet?</div>';
+    toast('Budget load failed: '+e.message, true);
+  }
+}
+
+function paidForItem(itemId){
+  return budgetState.payments.filter(p=>p.item_id===itemId).reduce((s,p)=>s+Number(p.amount),0);
+}
+
+function savingsBalance(){
+  return budgetState.contributions.reduce((s,c)=> s + (c.direction==='deposit'? Number(c.amount) : -Number(c.amount)), 0);
+}
+
+function renderBudget(){
+  renderBudgetSummary();
+  const wrap = document.getElementById('budgetCategories');
+  wrap.innerHTML = '';
+  if(!budgetState.categories.length){
+    wrap.innerHTML = '<div class="empty-state">No budget categories found. Run budget-schema.sql once in the Supabase SQL editor.</div>';
+    return;
+  }
+  budgetState.categories.forEach(cat=>{
+    const card = document.createElement('div');
+    card.className = 'card budget-category-card';
+    card.dataset.catKey = cat.key;
+    if(cat.type === 'itemized') card.innerHTML = renderItemizedCategory(cat);
+    else if(cat.type === 'pool') card.innerHTML = renderPoolCategory(cat);
+    else card.innerHTML = renderReferenceCategory(cat);
+    wrap.appendChild(card);
+  });
+}
+
+function renderBudgetSummary(){
+  const el = document.getElementById('budgetSummary');
+  let oneOffRemaining = 0, monthlyTotal = 0;
+
+  budgetState.categories.forEach(cat=>{
+    if(cat.type === 'itemized'){
+      const items = budgetState.items.filter(i=>i.category_key===cat.key);
+      const catRemaining = items.reduce((s,i)=>{
+        if(i.total_cost==null) return s;
+        return s + Math.max(0, Number(i.total_cost) - paidForItem(i.id));
+      }, 0);
+      if(cat.cadence === 'monthly') monthlyTotal += catRemaining; else oneOffRemaining += catRemaining;
+    } else if(cat.type === 'reference'){
+      const ref = budgetState.references.find(r=>r.category_key===cat.key);
+      const val = ref && ref.manual_total!=null ? Number(ref.manual_total) : 0;
+      if(cat.cadence === 'monthly') monthlyTotal += val; else oneOffRemaining += val;
+    }
+  });
+
+  const balance = savingsBalance();
+  const totalCommitted = oneOffRemaining + monthlyTotal;
+
+  el.innerHTML = `
+    <div class="budget-stat"><div class="stat-label">Total Committed</div><div class="stat-value">${fmtNum(totalCommitted)}</div></div>
+    <div class="budget-stat"><div class="stat-label">One-off Remaining</div><div class="stat-value">${fmtNum(oneOffRemaining)}</div></div>
+    <div class="budget-stat"><div class="stat-label">Monthly Recurring</div><div class="stat-value">${fmtNum(monthlyTotal)}</div></div>
+    <div class="budget-stat savings"><div class="stat-label">Savings Balance</div><div class="stat-value">${fmtNum(balance)}</div></div>
+  `;
+}
+
+/* ---------- itemized category (Teeth, Self-Care) ---------- */
+function renderItemizedCategory(cat){
+  const items = budgetState.items.filter(i=>i.category_key===cat.key)
+    .sort((a,b)=> (a.display_order-b.display_order) || (a.item_date||'').localeCompare(b.item_date||''));
+  const cadencePill = cat.cadence ? `<span class="pill neutral">${escHtml(cat.cadence)}</span>` : '';
+  const itemsHtml = items.length
+    ? items.map(renderBudgetItemRow).join('')
+    : `<div class="empty-state" style="padding:16px;">No items yet.</div>`;
+  return `
+    <div class="budget-cat-head">
+      <div class="budget-cat-title"><span class="cat-key">${cat.key}</span>${escHtml(cat.name)}</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        ${cadencePill}
+        <button class="btn small accent" data-action="add-item" data-cat="${cat.key}">+ Add Item</button>
+      </div>
+    </div>
+    <div class="budget-inline-form-slot" data-form-slot="${cat.key}"></div>
+    <div class="budget-item-list">${itemsHtml}</div>
+  `;
+}
+
+function renderBudgetItemRow(item){
+  const paid = paidForItem(item.id);
+  const hasTotalCost = item.total_cost != null;
+  const remaining = hasTotalCost ? (Number(item.total_cost) - paid) : null;
+  let badge = '';
+  if(hasTotalCost){
+    badge = remaining <= 0
+      ? `<span class="pill good">Paid in full</span>`
+      : `<span class="pill flare">${fmtNum(remaining)} left</span>`;
+  }
+  const payments = budgetState.payments.filter(p=>p.item_id===item.id)
+    .sort((a,b)=> (a.payment_date||'').localeCompare(b.payment_date||''));
+  const paymentsHtml = payments.map(p=>`
+    <div class="budget-payment-row">
+      <span>${fmtDateShort(p.payment_date)}${p.label ? ' · '+escHtml(p.label) : ''}</span>
+      <span>${fmtNum(p.amount)}<button class="row-del" data-action="del-payment" data-id="${p.id}" title="Remove">✕</button></span>
+    </div>`).join('');
+  return `
+    <div class="budget-item" data-item-id="${item.id}">
+      <div class="budget-item-top">
+        <div class="budget-item-title">${escHtml(item.title)}${item.item_date ? ` <span class="log-daynum">${fmtDateShort(item.item_date)}</span>` : ''}</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          ${hasTotalCost ? `<span class="budget-item-cost">${fmtNum(item.total_cost)} total</span>` : ''}
+          ${badge}
+        </div>
+      </div>
+      ${item.notes ? `<div class="log-attachments">${escHtml(item.notes)}</div>` : ''}
+      ${paymentsHtml}
+      <div class="budget-inline-form-slot" data-item-form-slot="${item.id}"></div>
+      <div class="budget-item-actions">
+        <button class="text-btn" data-action="add-payment" data-item="${item.id}" style="color:var(--accent);">+ Log Payment</button>
+        <button class="text-btn" data-action="del-item" data-item="${item.id}">Delete Item</button>
+      </div>
+    </div>
+  `;
+}
+
+function openAddItemForm(catKey){
+  const slot = document.querySelector(`[data-form-slot="${catKey}"]`);
+  if(!slot) return;
+  slot.innerHTML = `
+    <div class="subform-row" style="grid-template-columns:1fr 120px 130px auto;">
+      <input type="text" class="f-input bi-title" placeholder="Item title (e.g. X-Rays)">
+      <input type="number" step="0.01" class="f-input bi-cost" placeholder="Total cost (optional)">
+      <input type="date" class="f-input bi-date" value="${todayISO()}">
+      <button class="row-del" data-action="cancel-inline-form" title="Cancel">✕</button>
+    </div>
+    <textarea class="f-input bi-notes" placeholder="Notes (optional)" style="margin-bottom:8px;"></textarea>
+    <button class="btn accent small" data-action="save-item" data-cat="${catKey}">Save Item</button>
+  `;
+}
+
+async function saveNewItem(catKey, btn){
+  const slot = btn.closest('.budget-inline-form-slot');
+  const title = slot.querySelector('.bi-title').value.trim();
+  if(!title){ toast('Item title is required', true); return; }
+  const costVal = slot.querySelector('.bi-cost').value;
+  const payload = {
+    category_key: catKey,
+    title,
+    total_cost: costVal===''? null : parseFloat(costVal),
+    item_date: slot.querySelector('.bi-date').value || null,
+    notes: slot.querySelector('.bi-notes').value.trim() || null,
+    display_order: budgetState.items.filter(i=>i.category_key===catKey).length
+  };
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    const { error } = await sb.from('budget_items').insert(payload);
+    if(error) throw error;
+    toast('Item added');
+    await loadBudget();
+  }catch(e){ toast('Save failed: '+e.message, true); btn.disabled=false; btn.textContent='Save Item'; }
+}
+
+async function deleteItem(itemId){
+  if(!confirm('Delete this item and its payment log?')) return;
+  try{
+    const { error } = await sb.from('budget_items').delete().eq('id', itemId);
+    if(error) throw error;
+    toast('Item deleted');
+    await loadBudget();
+  }catch(e){ toast('Delete failed: '+e.message, true); }
+}
+
+function openAddPaymentForm(itemId){
+  const slot = document.querySelector(`[data-item-form-slot="${itemId}"]`);
+  if(!slot) return;
+  slot.innerHTML = `
+    <div class="subform-row" style="grid-template-columns:110px 1fr 130px auto;">
+      <input type="number" step="0.01" class="f-input bp-amount" placeholder="Amount">
+      <input type="text" class="f-input bp-label" placeholder="Label (e.g. 50% TBA)">
+      <input type="date" class="f-input bp-date" value="${todayISO()}">
+      <button class="row-del" data-action="cancel-inline-form" title="Cancel">✕</button>
+    </div>
+    <button class="btn accent small" data-action="save-payment" data-item="${itemId}">Log Payment</button>
+  `;
+}
+
+async function saveNewPayment(itemId, btn){
+  const slot = btn.closest('.budget-inline-form-slot');
+  const amount = parseFloat(slot.querySelector('.bp-amount').value);
+  if(!amount || isNaN(amount)){ toast('Amount is required', true); return; }
+  const payload = {
+    item_id: itemId,
+    amount,
+    label: slot.querySelector('.bp-label').value.trim() || null,
+    payment_date: slot.querySelector('.bp-date').value || todayISO()
+  };
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    const { error } = await sb.from('budget_payments').insert(payload);
+    if(error) throw error;
+    toast('Payment logged');
+    await loadBudget();
+  }catch(e){ toast('Save failed: '+e.message, true); btn.disabled=false; btn.textContent='Log Payment'; }
+}
+
+async function deletePayment(id){
+  if(!confirm('Remove this payment?')) return;
+  try{
+    const { error } = await sb.from('budget_payments').delete().eq('id', id);
+    if(error) throw error;
+    toast('Payment removed');
+    await loadBudget();
+  }catch(e){ toast('Delete failed: '+e.message, true); }
+}
+
+/* ---------- pool category (Savings) ---------- */
+function renderPoolCategory(cat){
+  const goal = budgetState.savings.goal_amount;
+  const balance = savingsBalance();
+  const pct = goal ? Math.max(0, Math.min(100, Math.round(balance/goal*100))) : null;
+  const rows = budgetState.contributions;
+  const contributionsHtml = rows.length
+    ? rows.map(c=>`
+      <div class="budget-contribution-row ${c.direction}">
+        <span>${fmtDateShort(c.contribution_date)}${c.note ? ' · '+escHtml(c.note) : ''}</span>
+        <span class="amt">${c.direction==='withdrawal'?'-':'+'}${fmtNum(c.amount)}<button class="row-del" data-action="del-contribution" data-id="${c.id}" title="Remove">✕</button></span>
+      </div>`).join('')
+    : `<div class="empty-state" style="padding:16px;">No contributions yet.</div>`;
+
+  return `
+    <div class="budget-cat-head">
+      <div class="budget-cat-title"><span class="cat-key">${cat.key}</span>${escHtml(cat.name)}</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn small accent" data-action="add-contribution" data-dir="deposit">+ Deposit</button>
+        <button class="btn small ghost" data-action="add-contribution" data-dir="withdrawal">+ Withdraw</button>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin:8px 0 4px;">
+      <div class="budget-item-title" style="font-size:20px;">${fmtNum(balance)}</div>
+      ${goal!=null
+        ? `<button class="text-btn" data-action="set-goal">of ${fmtNum(goal)} goal · edit</button>`
+        : `<button class="text-btn" data-action="set-goal">Set a goal</button>`}
+    </div>
+    ${goal!=null ? `<div class="budget-progress-track"><div class="budget-progress-fill" style="width:${pct}%;"></div></div>` : ''}
+    <div class="budget-inline-form-slot" data-form-slot="${cat.key}"></div>
+    <div class="budget-contribution-list">${contributionsHtml}</div>
+  `;
+}
+
+function openContributionForm(dir, catKey){
+  const slot = document.querySelector(`[data-form-slot="${catKey}"]`);
+  if(!slot) return;
+  slot.innerHTML = `
+    <div class="subform-row" style="grid-template-columns:120px 1fr 130px auto;">
+      <input type="number" step="0.01" class="f-input bc-amount" placeholder="Amount">
+      <input type="text" class="f-input bc-note" placeholder="Note (optional)">
+      <input type="date" class="f-input bc-date" value="${todayISO()}">
+      <button class="row-del" data-action="cancel-inline-form" title="Cancel">✕</button>
+    </div>
+    <button class="btn accent small" data-action="save-contribution" data-dir="${dir}">${dir==='deposit'?'Add Deposit':'Add Withdrawal'}</button>
+  `;
+}
+
+async function saveContribution(btn){
+  const slot = btn.closest('.budget-inline-form-slot');
+  const amount = parseFloat(slot.querySelector('.bc-amount').value);
+  if(!amount || isNaN(amount)){ toast('Amount is required', true); return; }
+  const payload = {
+    amount,
+    direction: btn.dataset.dir,
+    note: slot.querySelector('.bc-note').value.trim() || null,
+    contribution_date: slot.querySelector('.bc-date').value || todayISO()
+  };
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    const { error } = await sb.from('budget_savings_contributions').insert(payload);
+    if(error) throw error;
+    toast(payload.direction==='deposit' ? 'Deposit added' : 'Withdrawal added');
+    await loadBudget();
+  }catch(e){ toast('Save failed: '+e.message, true); btn.disabled=false; }
+}
+
+async function deleteContribution(id){
+  if(!confirm('Remove this contribution?')) return;
+  try{
+    const { error } = await sb.from('budget_savings_contributions').delete().eq('id', id);
+    if(error) throw error;
+    toast('Removed');
+    await loadBudget();
+  }catch(e){ toast('Delete failed: '+e.message, true); }
+}
+
+function openGoalForm(catKey){
+  const slot = document.querySelector(`[data-form-slot="${catKey}"]`);
+  if(!slot) return;
+  slot.innerHTML = `
+    <div class="subform-row" style="grid-template-columns:1fr auto;">
+      <input type="number" step="0.01" class="f-input bg-goal" placeholder="Goal amount" value="${budgetState.savings.goal_amount ?? ''}">
+      <button class="row-del" data-action="cancel-inline-form" title="Cancel">✕</button>
+    </div>
+    <button class="btn accent small" data-action="save-goal">Save Goal</button>
+  `;
+}
+
+async function saveGoal(btn){
+  const slot = btn.closest('.budget-inline-form-slot');
+  const val = slot.querySelector('.bg-goal').value;
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    const { error } = await sb.from('budget_savings').update({goal_amount: val===''? null : parseFloat(val)}).eq('id',1);
+    if(error) throw error;
+    toast('Goal updated');
+    await loadBudget();
+  }catch(e){ toast('Save failed: '+e.message, true); btn.disabled=false; }
+}
+
+/* ---------- reference stub category (Shopping, Gifts, Doctor, Transportation) ---------- */
+function renderReferenceCategory(cat){
+  const ref = budgetState.references.find(r=>r.category_key===cat.key) || {manual_total:null, manual_note:''};
+  const cadencePill = cat.cadence ? `<span class="pill neutral">${escHtml(cat.cadence)}</span>` : '';
+  return `
+    <div class="budget-cat-head">
+      <div class="budget-cat-title"><span class="cat-key">${cat.key}</span>${escHtml(cat.name)}</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        ${cadencePill}
+        <span class="pill watch">No dedicated page yet</span>
+      </div>
+    </div>
+    <div class="budget-ref-stub" data-ref="${cat.key}">
+      <div class="f-grid cols-2">
+        <div><label class="f-label">Manual total</label><input type="number" step="0.01" class="f-input ref-total" value="${ref.manual_total ?? ''}" placeholder="0.00"></div>
+        <div><label class="f-label">Note</label><input type="text" class="f-input ref-note" value="${escHtml(ref.manual_note || '')}" placeholder="Optional note"></div>
+      </div>
+      <button class="btn small" style="margin-top:10px;" data-action="save-ref" data-cat="${cat.key}">Save</button>
+    </div>
+  `;
+}
+
+async function saveReference(catKey, btn){
+  const card = btn.closest('[data-ref]');
+  const totalVal = card.querySelector('.ref-total').value;
+  const payload = {
+    category_key: catKey,
+    manual_total: totalVal===''? null : parseFloat(totalVal),
+    manual_note: card.querySelector('.ref-note').value.trim() || null,
+    updated_at: new Date().toISOString()
+  };
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    const { error } = await sb.from('budget_references').upsert(payload, {onConflict:'category_key'});
+    if(error) throw error;
+    toast('Saved');
+    await loadBudget();
+  }catch(e){ toast('Save failed: '+e.message, true); btn.disabled=false; btn.textContent='Save'; }
+}
+
+/* ---------- event delegation (attached once — inner HTML is replaced on every re-render) ---------- */
+function wireBudgetEvents(){
+  document.getElementById('budgetCategories').addEventListener('click', async (e)=>{
+    const btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    const action = btn.dataset.action;
+
+    if(action === 'add-item') openAddItemForm(btn.dataset.cat);
+    else if(action === 'save-item') await saveNewItem(btn.dataset.cat, btn);
+    else if(action === 'del-item') await deleteItem(btn.dataset.item);
+    else if(action === 'add-payment') openAddPaymentForm(btn.dataset.item);
+    else if(action === 'save-payment') await saveNewPayment(btn.dataset.item, btn);
+    else if(action === 'del-payment') await deletePayment(btn.dataset.id);
+    else if(action === 'save-ref') await saveReference(btn.dataset.cat, btn);
+    else if(action === 'add-contribution') openContributionForm(btn.dataset.dir, btn.closest('.budget-category-card').dataset.catKey);
+    else if(action === 'save-contribution') await saveContribution(btn);
+    else if(action === 'del-contribution') await deleteContribution(btn.dataset.id);
+    else if(action === 'set-goal') openGoalForm(btn.closest('.budget-category-card').dataset.catKey);
+    else if(action === 'save-goal') await saveGoal(btn);
+    else if(action === 'cancel-inline-form'){ const slot = btn.closest('.budget-inline-form-slot'); if(slot) slot.innerHTML=''; }
+  });
+}

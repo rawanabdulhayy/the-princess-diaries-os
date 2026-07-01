@@ -170,6 +170,41 @@ textarea.f-input{resize:vertical;min-height:64px;line-height:1.5;font-family:'IB
 .block-del:hover{color:var(--flare);}
 .day-plan-date-row{display:flex;gap:12px;align-items:center;margin-bottom:18px;flex-wrap:wrap;}
 
+/* ===================== BUDGET TAB ===================== */
+.budget-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:22px;}
+.budget-stat{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
+.budget-stat .stat-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px;}
+.budget-stat .stat-value{font-family:'Fraunces',serif;font-size:22px;font-weight:600;}
+.budget-stat.savings .stat-value{color:var(--good);}
+
+.budget-category-card{}
+.budget-cat-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+.budget-cat-title{font-family:'Fraunces',serif;font-weight:600;font-size:17px;}
+.budget-cat-title .cat-key{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);margin-right:8px;}
+
+.budget-item{border-top:1px solid var(--line);padding:10px 0;}
+.budget-item:first-of-type{border-top:none;}
+.budget-item-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.budget-item-title{font-weight:500;font-size:14px;}
+.budget-item-cost{font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:var(--ink-soft);}
+.budget-payment-row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-soft);padding:4px 0 4px 14px;border-left:2px solid var(--line);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
+.budget-payment-row .row-del{margin-left:8px;background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:12px;}
+.budget-payment-row .row-del:hover{color:var(--flare);}
+.budget-item-actions{display:flex;gap:14px;margin-top:8px;}
+.budget-inline-form-slot:empty{display:none;}
+.budget-inline-form-slot{margin-top:10px;}
+
+.budget-ref-stub{}
+
+.budget-progress-track{height:10px;background:var(--bg);border-radius:20px;overflow:hidden;margin:10px 0;}
+.budget-progress-fill{height:100%;background:var(--good);transition:width .3s;}
+.budget-contribution-row{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;border-top:1px solid var(--line);}
+.budget-contribution-row:first-of-type{border-top:none;}
+.budget-contribution-row.deposit .amt{color:var(--good);font-family:'IBM Plex Mono',monospace;}
+.budget-contribution-row.withdrawal .amt{color:var(--flare);font-family:'IBM Plex Mono',monospace;}
+.budget-contribution-row .row-del{margin-left:8px;background:none;border:none;color:var(--ink-soft);cursor:pointer;font-size:12px;}
+.budget-contribution-row .row-del:hover{color:var(--flare);}
+
 /* RESPONSIVE */
 @media (max-width:600px){
   .sheet{padding:20px 14px 60px;}
@@ -203,6 +238,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
     <button class="tab-btn" data-tab="inventory" role="tab">Inventory</button>
     <button class="tab-btn" data-tab="planner" role="tab">Day Plan</button>
     <button class="tab-btn" data-tab="archive" role="tab">Archive</button>
+    <button class="tab-btn" data-tab="budget" role="tab">Budget</button>
   </div>
 
   <!-- ============ LOG TAB ============ -->
@@ -320,6 +356,20 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,te
 
     <div id="archiveLogList"></div>
     <div id="offlineViewer"></div>
+  </div>
+
+  <!-- ============ BUDGET TAB ============ -->
+  <div class="tab-panel" id="panel-budget">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Budget</h2>
+        <div class="section-sub">Seven categories, three shapes — itemized ledgers, a savings pool, and reference stubs for the pages not built yet.</div>
+      </div>
+    </div>
+
+    <div class="budget-summary" id="budgetSummary"></div>
+
+    <div id="budgetCategories"><div class="empty-state">Loading budget…</div></div>
   </div>
 
 </div>
